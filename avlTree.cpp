@@ -2,6 +2,8 @@
 #include <string>
 #include "node.hpp"
 #include "printTree.hpp"
+#include <stdlib.h>
+#include <time.h>
 
 using namespace std;
 
@@ -34,17 +36,40 @@ int main()
 //	pt.print();
 
 	avlTree avl;
+	time_t curTime = time(nullptr);
+	srandom(curTime);
 
-	avl.insert(50);
-	avl.insert(60);
-	avl.insert(40);
-	avl.insert(30);
-	avl.insert(20);
-	avl.insert(35);
-	avl.insert(37);
-	avl.insert(36);
-	avl.insert(70);
+	for (int i = 0; i < 50; ++i) {
+		auto data  = random() % 100;
+//		cout << "Now inserting : " << data << endl;
+		avl.insert(data);
+		avl.traverseForBalance(avl.getRoot());
+	}
+
 	printTree avlpt(avl.getRoot());
+
+	avl.traverseForBalance(avl.getRoot());
+
+	for (int i = 0; i < 500; ++i) {
+		auto data  = random() % 100;
+//		cout << "Now deleting : " << data << endl;
+		avl.remove(data);
+		avl.traverseForBalance(avl.getRoot());
+	}
+
+	avlpt.print(avl.getRoot());
+
+	avl.traverseForBalance(avl.getRoot());
+//	avl.insert(50);
+//	avl.insert(60);
+//	avl.insert(40);
+//	avl.insert(30);
+//	avl.insert(20);
+//	avl.insert(35);
+//	avl.insert(37);
+//	avl.insert(36);
+//	avl.insert(70);
+//	printTree avlpt(avl.getRoot());
 //	avlpt.print(avl.getRoot());
 
 	return 0;

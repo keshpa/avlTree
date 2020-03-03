@@ -1,5 +1,6 @@
 #pragma once
 #include <iostream>
+#include <functional>
 #include <string>
 #include <assert.h>
 using namespace std;
@@ -43,125 +44,269 @@ public:
 		Unknown
 	};
 
-	int insert(int data) {
-		if (root == nullptr) {
-			root = new Node(data);
-			return 1;
-		}
-		if (data == root->data) {
-			return 0;
-		}
-
-		int gcDir; //grand child direction
-		Imbalance imbalance = Imbalance::None;
-		int inserted = insertImpl(root, data, gcDir, imbalance);
-
-		if (imbalance != Imbalance::None) {
-			if (handleImbalance(&root, imbalance)) {
-				inserted = 0; // Since we handle the imbalance, the added edge due to the just inserted node has been squashed
+	void setEdges(Node* curNode, bool left, bool right) {
+		assert(curNode);
+		if (left) {
+			if (curNode->left) {
+				curNode->leftEdges = max(curNode->left->leftEdges, curNode->left->rightEdges) + 1;
+			} else {
+				curNode->leftEdges = 0;
 			}
 		}
-
-		if (inserted && data < root->data) {
-			if (abs(root->rightEdges - root->leftEdges) > 1) {
-				if (gcDir) {
-					cout << "RR Imbalance at root node : " << root->data << " when inserting : " << data << endl;
-					imbalance = Imbalance::RRImbalance;
-				} else {
-					cout << "RL Imbalance at root node : " << root->data << " when inserting : " << data << endl;
-					imbalance = Imbalance::RLImbalance;
-				}
-			}
-		}
-		if (inserted && data > root->data) {
-			if (abs(root->rightEdges - root->leftEdges) > 1) {
-				if (gcDir) {
-					cout << "RR Imbalance at root node : " << root->data << " when inserting : " << data << endl;
-					imbalance = Imbalance::RRImbalance;
-				} else {
-					cout << "RL Imbalance at root node : " << root->data << " when inserting : " << data << endl;
-					imbalance = Imbalance::RLImbalance;
-				}
+		if (right) {
+			if (curNode->right) {
+				curNode->rightEdges = max(curNode->right->leftEdges, curNode->right->rightEdges) + 1;
+			} else {
+				curNode->rightEdges = 0;
 			}
 		}
 	}
 
-	int insertImpl(Node* curNode, int data, int& gcDir, Imbalance& imbalance) {
-		assert(curNode);
-		if (data == curNode->data) {
-			return 0;
+	Imbalance detectImbalance(Node* curNode) {
+		Imbalance imbalance = Imbalance::None;
+		if (abs(curNode->leftEdges - curNode->rightEdges) > 1) {
+			if (curNode->leftEdges > curNode->rightEdges) {
+				// Can only have LLImbalance or LRImbalance
+				assert(curNode->left);
+				if (curNode->left->leftEdges >= curNode->left->rightEdges) {
+					imbalance = Imbalance::LLImbalance;
+				} else {
+					imbalance = Imbalance::LRImbalance;
+				}
+			} else {
+				// Can only have RLImbalance or RRImbalance
+				assert(curNode->right);
+				if (curNode->right->rightEdges >= curNode->right->leftEdges) {
+					imbalance = Imbalance::RRImbalance;
+				} else {
+					imbalance = Imbalance::RLImbalance;
+				}
+			}
 		}
-		int inserted = 0;
-		Imbalance nodeImbalance = Imbalance::None;
-		if (data > curNode->data) {
-			if (curNode->right) {
-				gcDir = 1;
-				int nextGCDir;
-				inserted = insertImpl(curNode->right, data, nextGCDir, nodeImbalance);
-				if (nodeImbalance != Imbalance::None) {
-					if (handleImbalance(&curNode->right, nodeImbalance)) {
-						inserted = 0; // Since we handle the imbalance, the added edge due to the just inserted node has been squashed
+		return imbalance;
+	}
+
+	void remove(int data) {
+		if (root == nullptr) {
+			return;
+		}
+		auto imbalance = removeImpl(&root, data, false);
+		if (imbalance != Imbalance::None) {
+			handleImbalance(&root, imbalance);
+		}
+
+		if (root) {
+			setEdges(root, true, true);
+		}
+	}
+
+	Imbalance removeImpl(Node** parent, int data, bool found) {
+		if (not (*parent)) {
+			return Imbalance::None;
+		}
+		assert(*parent);
+
+		function<Imbalance(Node**, int)> deleteDown = [&](Node** parent, int data) -> Imbalance {
+			assert(*parent);
+			Node* curNode = *parent;
+			Imbalance imbalance = Imbalance::None;
+			if (not curNode->leftEdges && not curNode->rightEdges) {
+				*parent = nullptr;
+				free(curNode);
+				imbalance = Imbalance::None;
+			} else {
+				if (curNode->leftEdges >= curNode->rightEdges) {
+					assert(curNode->left);
+					curNode->data = curNode->left->data;
+					imbalance = removeImpl(&curNode->left, data, true);
+
+					if (imbalance != Imbalance::None) {
+						handleImbalance(&curNode->left, imbalance);
 					}
+					assert(curNode->leftEdges);
+					setEdges(curNode, true, false);
+					imbalance = detectImbalance(curNode);
+				} else {
+					assert(curNode->right);
+					curNode->data = curNode->right->data;
+					imbalance = removeImpl(&curNode->right, data, true);
+
+					if (imbalance != Imbalance::None) {
+						handleImbalance(&curNode->right, imbalance);
+					}
+					assert(curNode->rightEdges);
+					setEdges(curNode, false, true);
+					imbalance = detectImbalance(curNode);
+				}
+			}
+			return imbalance;
+		};
+
+		Node* curNode = *parent;
+		Imbalance imbalance = Imbalance::None;
+		if (not found) {
+			if (data < curNode->data) {
+				imbalance = removeImpl(&curNode->left, data, false);
+
+				if (imbalance != Imbalance::None) {
+					handleImbalance(&curNode->left, imbalance);
 				}
 
-				if (inserted) {
-					++curNode->rightEdges;
+				setEdges(curNode, true, false);
+				imbalance = detectImbalance(curNode);
+			} else if (data > curNode->data) {
+				imbalance = removeImpl(&curNode->right, data, false);
+
+				if (imbalance != Imbalance::None) {
+					handleImbalance(&curNode->right, imbalance);
 				}
-				// We can only have a RR or RL imbalance
-				if (abs(curNode->rightEdges - curNode->leftEdges) > 1) {
-					if (nextGCDir) {
-						cout << "RR Imbalance at node : " << curNode->data << " when inserting : " << data << endl;
-						imbalance = Imbalance::RRImbalance;
-					} else {
-						cout << "RL Imbalance at node : " << curNode->data << " when inserting : " << data << endl;
-						imbalance = Imbalance::RLImbalance;
-					}
-				}
+
+				setEdges(curNode, false, true);
+				imbalance = detectImbalance(curNode);
 			} else {
-				gcDir = 1; // Right direction is a one, left is a zero
-				curNode->right = new Node(data);
-				++curNode->rightEdges;
-				if (not curNode->leftEdges) {
-					return 1;
-				} else {
-					return 0;
-				}
+				imbalance = deleteDown(parent, data);
 			}
 		} else {
-			if (curNode->left) {
-				gcDir = 0;
-				int nextGCDir;
-				inserted = insertImpl(curNode->left, data, nextGCDir, nodeImbalance);
+			imbalance = deleteDown(parent, data);
+		}
+		return imbalance;
+	}
+
+	void insert(int data) {
+		if (root == nullptr) {
+			root = new Node(data);
+			return;
+		}
+		if (data == root->data) {
+			return;
+		}
+
+		bool nextTookRight = false;
+		Imbalance imbalance = insertImpl(root, data, nextTookRight);
+
+		if (imbalance != Imbalance::None) {
+			handleImbalance(&root, imbalance);
+		}
+
+		setEdges(root, true, true);
+
+		if (data < root->data) {
+			imbalance = checkImbalance(root, true, nextTookRight);
+			string myString = "Imbalance at root node after left insert : " + to_string(data);
+			printImbalance(myString, imbalance);
+		}
+		if (data > root->data) {
+			imbalance = checkImbalance(root, right, nextTookRight);
+			string myString = "Imbalance at root node after right insert : " + to_string(data);
+			printImbalance(myString, imbalance);
+		}
+	}
+
+	Imbalance insertImpl(Node* curNode, int data, bool& tookRight) {
+		assert(curNode);
+		Imbalance imbalance = Imbalance::None;
+
+		if (data == curNode->data) {
+			return Imbalance::None;
+		}
+		Imbalance nodeImbalance = Imbalance::None;
+		if (data > curNode->data) {
+			tookRight = true;
+			if (curNode->right) {
+				bool nextTookRight = false;
+				nodeImbalance = insertImpl(curNode->right, data, nextTookRight);
 				if (nodeImbalance != Imbalance::None) {
-					if (handleImbalance(&curNode->left, nodeImbalance)) {
-						inserted = 0; // Since we handle the imbalance, the added edge due to the just inserted node has been squashed
-					}
+					handleImbalance(&curNode->right, nodeImbalance);
 				}
-				if (inserted) {
-					++curNode->leftEdges;
-				}
-				// We can only have a LL or LR imbalance
-				if (abs(curNode->rightEdges - curNode->leftEdges) > 1) {
-					if (nextGCDir) {
-						cout << "LR Imbalance at node : " << curNode->data << " when inserting : " << data << endl;
-						imbalance = Imbalance::LRImbalance;
-					} else {
-						cout << "LL Imbalance at node : " << curNode->data << " when inserting : " << data << endl;
-						imbalance = Imbalance::LLImbalance;
-					}
-				}
+
+				assert(curNode->right);
+				setEdges(curNode, false, true);
+
+				// We can only have a RR or RL imbalance
+				imbalance = checkImbalance(curNode, true, nextTookRight);
 			} else {
-				gcDir = 0; // Right direction is a one, left is a zero
+				curNode->right = new Node(data);
+				++curNode->rightEdges;
+				return Imbalance::None;
+			}
+		} else {
+			tookRight = false;;
+			if (curNode->left) {
+				bool nextTookRight = false;
+				nodeImbalance = insertImpl(curNode->left, data, nextTookRight);
+				if (nodeImbalance != Imbalance::None) {
+					handleImbalance(&curNode->left, nodeImbalance);
+				}
+
+				assert(curNode->left);
+				setEdges(curNode, true, false);
+
+				// We can only have a LL or LR imbalance
+				imbalance = checkImbalance(curNode, false, nextTookRight);
+
+			} else {
 				curNode->left = new Node(data);
 				++curNode->leftEdges;
-				if (not curNode->rightEdges) {
-					return 1;
-				} else {
-					return 0;
-				}
+				return Imbalance::None;
 			}
 		}
-		return inserted;
+		return imbalance;
+	}
+
+	void traverseForBalance(Node* curNode) {
+		if (not curNode) {
+			return;
+		}
+		if (not curNode->left) {
+			if (curNode->leftEdges) {
+				cout << "Left edges should be zero at : " << curNode->data << ". leftEdges : " << curNode->leftEdges << endl;
+			}
+		} else {
+			traverseForBalance(curNode->left);
+			if (curNode->leftEdges != (max(curNode->left->leftEdges, curNode->left->rightEdges) + 1)) {
+				cout << "Left edges should be : " << (max(curNode->left->leftEdges, curNode->left->rightEdges) + 1) << " at : " << curNode->data << ". Actual leftEdges : " << curNode->leftEdges << endl;
+			}
+		}
+
+		if (not curNode->right) {
+			if (curNode->rightEdges) {
+				cout << "Right edges should be zero at : " << curNode->data << ". rightEdges : " << curNode->rightEdges << endl;
+			}
+		} else {
+			traverseForBalance(curNode->right);
+			if (curNode->rightEdges != (max(curNode->right->leftEdges, curNode->right->rightEdges) + 1)) {
+				cout << "Right edges should be : " << (max(curNode->right->leftEdges, curNode->right->rightEdges) + 1) << " at : " << curNode->data << ". Actual rightEdges : " << curNode->rightEdges << endl;
+			}
+		}
+
+		if (abs(curNode->leftEdges -  curNode->rightEdges) > 1) {
+			cout << "Node with value : " << curNode->data << " is not balanced. The left edges value is : " << curNode->leftEdges << " and right edges value is : " << curNode->rightEdges << endl;
+		}
+		return;
+	}
+
+	Imbalance checkImbalance(Node* node, bool firstDirRight, bool nextDirRight) {
+		assert(node);
+		Imbalance imbalance = Imbalance::None;
+		auto diff = abs(node->rightEdges - node->leftEdges);
+		if (diff <= 1) {
+			return Imbalance::None;
+		}
+
+		if (firstDirRight) { // first direction was right
+			if (nextDirRight) {
+				imbalance = Imbalance::RRImbalance;
+			} else {
+				imbalance = Imbalance::RLImbalance;
+			}
+		} else {
+			if (not nextDirRight) {
+				imbalance = Imbalance::LLImbalance;
+			} else {
+				imbalance = Imbalance::LRImbalance;
+			}
+		}
+		return imbalance;
 	}
 
 	bool handleImbalance(Node** anchor, Imbalance imbalance) {
@@ -205,7 +350,7 @@ public:
 			(*gP)->right->leftEdges = max(lRight->leftEdges, lRight->rightEdges) + 1;
 		}
 
-		(*gP)->rightEdges = max((*gP)->right->rightEdges, (*gP)->right->leftEdges) + 1;
+		setEdges(*gP, false, true);
 	}
 
 	// We get the address of grand parent of the inserted node on which to operate on.
@@ -226,7 +371,7 @@ public:
 			(*gP)->left->rightEdges = max(rLeft->leftEdges, rLeft->rightEdges) + 1;
 		}
 
-		(*gP)->leftEdges = max((*gP)->left->rightEdges, (*gP)->left->leftEdges) + 1;
+		setEdges(*gP, true, false);
 	}
 
 	// We get the address of grand parent of the inserted node on which to operate on.
@@ -258,8 +403,7 @@ public:
 			newR->left->rightEdges = max(lrl->leftEdges, lrl->rightEdges) + 1;
 		}
 
-		newR->rightEdges = max(newR->right->leftEdges, newR->right->rightEdges) + 1;
-		newR->leftEdges = max(newR->left->leftEdges, newR->left->rightEdges) + 1;
+		setEdges(newR, true, true);
 
 	}
 
@@ -292,8 +436,32 @@ public:
 			newR->right->leftEdges = max(rlr->leftEdges, rlr->rightEdges) + 1;
 		}
 
-		newR->leftEdges = max(newR->left->leftEdges, newR->left->rightEdges) + 1;
-		newR->rightEdges = max(newR->right->leftEdges, newR->right->rightEdges) + 1;
+		setEdges(newR, true, true);
+	}
+
+	void printImbalance(string& prtStr, Imbalance imbalance) {
+		if (imbalance == Imbalance::None) {
+			return;
+		}
+
+		cout << prtStr;
+		switch (imbalance) {
+		case Imbalance::LLImbalance:
+			cout << "LLImbalance" << endl;
+			break;
+		case Imbalance::LRImbalance:
+			cout << "LRImbalance" << endl;
+			break;
+		case Imbalance::RRImbalance:
+			cout << "RRImbalance" << endl;
+			break;
+		case Imbalance::RLImbalance:
+			cout << "RLImbalance" << endl;
+			break;
+		default:
+			cout << "RLImbalance" << endl;
+			break;
+		}
 	}
 
 private:

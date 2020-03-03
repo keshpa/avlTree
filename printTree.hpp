@@ -15,8 +15,8 @@ public:
 		myTrunk(myTrunk* prev, bool left) : prev(prev), isLeft(left), printed(false) {}
 	};
 
-	printTree(Node *node) : root(node) {
-		printImpl(root, nullptr, false);
+	printTree(Node *node) {
+		printImpl(node, nullptr, false);
 		cout << endl << endl << endl;
 	}
 
@@ -59,13 +59,8 @@ public:
 		}
 	}
 
-	void print(Node* newRoot = nullptr) {
-		if (not newRoot) {
-			printImpl(root);
-		} else {
-			root = newRoot;
-			printImpl(root);
-		}
+	void print(Node* newRoot) {
+		printImpl(newRoot);
 		cout << endl << endl << endl;
 	}
 
@@ -92,6 +87,4 @@ private:
 		printImpl(curNode->left, &trunk, false);
 		trunk.printed = false;
 	};
-
-	Node* root;
 };
