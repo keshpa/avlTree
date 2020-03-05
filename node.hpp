@@ -5,7 +5,7 @@
 #include <assert.h>
 using namespace std;
 
-#define max(a, b) ((a) > (b) ? (a) : (b))
+#define INTmax(a, b) ((a) > (b) ? (a) : (b))
 
 // Data structure to store a Binary Tree node
 class Node {
@@ -48,14 +48,14 @@ public:
 		assert(curNode);
 		if (left) {
 			if (curNode->left) {
-				curNode->leftEdges = max(curNode->left->leftEdges, curNode->left->rightEdges) + 1;
+				curNode->leftEdges = INTmax(curNode->left->leftEdges, curNode->left->rightEdges) + 1;
 			} else {
 				curNode->leftEdges = 0;
 			}
 		}
 		if (right) {
 			if (curNode->right) {
-				curNode->rightEdges = max(curNode->right->leftEdges, curNode->right->rightEdges) + 1;
+				curNode->rightEdges = INTmax(curNode->right->leftEdges, curNode->right->rightEdges) + 1;
 			} else {
 				curNode->rightEdges = 0;
 			}
@@ -90,7 +90,7 @@ public:
 		if (root == nullptr) {
 			return;
 		}
-		auto imbalance = removeImpl(&root, data, false);
+		auto imbalance = removeImpl(&root, data);
 		if (imbalance != Imbalance::None) {
 			handleImbalance(&root, imbalance);
 		}
@@ -100,76 +100,162 @@ public:
 		}
 	}
 
-	Imbalance removeImpl(Node** parent, int data, bool found) {
+	Imbalance removeImpl(Node** parent, int data) {
 		if (not (*parent)) {
 			return Imbalance::None;
 		}
 		assert(*parent);
 
-		function<Imbalance(Node**, int)> deleteDown = [&](Node** parent, int data) -> Imbalance {
-			assert(*parent);
-			Node* curNode = *parent;
-			Imbalance imbalance = Imbalance::None;
-			if (not curNode->leftEdges && not curNode->rightEdges) {
-				*parent = nullptr;
-				free(curNode);
-				imbalance = Imbalance::None;
-			} else {
-				if (curNode->leftEdges >= curNode->rightEdges) {
-					assert(curNode->left);
-					curNode->data = curNode->left->data;
-					imbalance = removeImpl(&curNode->left, data, true);
-
-					if (imbalance != Imbalance::None) {
-						handleImbalance(&curNode->left, imbalance);
-					}
-					assert(curNode->leftEdges);
-					setEdges(curNode, true, false);
-					imbalance = detectImbalance(curNode);
-				} else {
-					assert(curNode->right);
-					curNode->data = curNode->right->data;
-					imbalance = removeImpl(&curNode->right, data, true);
-
-					if (imbalance != Imbalance::None) {
-						handleImbalance(&curNode->right, imbalance);
-					}
-					assert(curNode->rightEdges);
-					setEdges(curNode, false, true);
-					imbalance = detectImbalance(curNode);
-				}
-			}
-			return imbalance;
-		};
-
 		Node* curNode = *parent;
 		Imbalance imbalance = Imbalance::None;
-		if (not found) {
-			if (data < curNode->data) {
-				imbalance = removeImpl(&curNode->left, data, false);
 
+		if (data < curNode->data) {
+			imbalance = removeImpl(&curNode->left, data);
+
+			if (imbalance != Imbalance::None) {
+				handleImbalance(&curNode->left, imbalance);
+			}
+
+			setEdges(curNode, true, false);
+			imbalance = detectImbalance(curNode);
+		} else if (data > curNode->data) {
+			imbalance = removeImpl(&curNode->right, data);
+
+			if (imbalance != Imbalance::None) {
+				handleImbalance(&curNode->right, imbalance);
+			}
+
+			setEdges(curNode, false, true);
+			imbalance = detectImbalance(curNode);
+		} else {
+//			cout << "Found victim node : " << curNode->data << " at address : " << hex << curNode << dec << endl;
+			imbalance = deleteNode(parent, &curNode->data);
+			if (imbalance != Imbalance::None) {
+				handleImbalance(parent, imbalance);
+			}
+			if (*parent) {
+				setEdges(*parent, true, true);
+				imbalance = detectImbalance(*parent);
+			} else {
+				imbalance = Imbalance::None;
+			}
+		}
+		return imbalance;
+	}
+
+	Imbalance deleteNode(Node** parent, int* replaceValue) {
+		assert(parent);
+		Node* curNode = *parent;
+		assert(curNode);
+		Imbalance imbalance = Imbalance::None;
+
+		if (not curNode->right && not curNode->left) {
+//			cout << "Found secondary victim node : " << curNode->data << " at address : " << hex << curNode << dec << endl;
+			if (replaceValue) {
+				*replaceValue = curNode->data;
+			}
+			free(curNode);
+			*parent = nullptr;
+			return Imbalance::None;
+		}
+		if (curNode->right) {
+			if (curNode->right->left) {
+				Node** newParent = &curNode->right;
+				imbalance = pruneSmallestLeftNode(newParent, replaceValue);
 				if (imbalance != Imbalance::None) {
-					handleImbalance(&curNode->left, imbalance);
+					handleImbalance(newParent, imbalance);
 				}
-
-				setEdges(curNode, true, false);
-				imbalance = detectImbalance(curNode);
-			} else if (data > curNode->data) {
-				imbalance = removeImpl(&curNode->right, data, false);
-
+				if (*newParent) {
+					setEdges(*newParent, true, true);
+					imbalance = detectImbalance(*newParent);
+				} else {
+					imbalance = Imbalance::None;
+				}
+			} else {
+//				cout << "Replacing old value : " << *replaceValue << " with new value : " << curNode->right->data << endl;
+				*replaceValue = curNode->right->data;
+				imbalance = deleteNode(&curNode->right, &curNode->right->data);
 				if (imbalance != Imbalance::None) {
 					handleImbalance(&curNode->right, imbalance);
 				}
+				setEdges(curNode, false, true);
+				imbalance = detectImbalance(curNode);
+			}
+		} else {
+//			cout << "Replacing original value : " << curNode->data << " with new value : " << curNode->left->data << endl;
+			curNode->data = curNode->left->data;
+//			cout << "Need replacement value for : " << curNode->left->data << endl;
+			imbalance = deleteNode(&curNode->left, &curNode->left->data);
+			if (imbalance != Imbalance::None) {
+				handleImbalance(&curNode->left, imbalance);
+			}
+			setEdges(curNode, true, false);
+			imbalance = detectImbalance(curNode);
+		}
+		return imbalance;
+	}
 
+	Imbalance pruneSmallestLeftNode(Node** parent, int* replacePayload) {
+		Imbalance imbalance = Imbalance::None;
+		assert(parent);
+		Node* curNode = *parent;
+		assert(curNode);
+
+		if (curNode->left) {
+			imbalance = pruneSmallestLeftNode(&curNode->left, replacePayload);
+			if (imbalance != Imbalance::None) {
+				handleImbalance(&curNode->left, imbalance);
+			}
+			setEdges(curNode, true, false);
+			imbalance = detectImbalance(curNode);
+		} else {
+//			cout << "Replacing old value : " << *replacePayload << " with new value : " << curNode->data << endl;
+			*replacePayload = curNode->data;
+			if (curNode->right) {
+//				cout << "Need replacement value for : " << curNode->data << endl;
+				imbalance = deleteNode(&curNode, &curNode->data);
+				if (imbalance != Imbalance::None) {
+					handleImbalance(&curNode->right, imbalance);
+				}
 				setEdges(curNode, false, true);
 				imbalance = detectImbalance(curNode);
 			} else {
-				imbalance = deleteDown(parent, data);
+				free(curNode);
+				*parent = nullptr;
 			}
-		} else {
-			imbalance = deleteDown(parent, data);
 		}
 		return imbalance;
+	}
+
+	bool find(int data) {
+		if (root == nullptr) {
+			return false;
+		}
+		if (root->data == data) {
+			return true;
+		}
+		return findTraverse(root, data);
+	}
+
+	bool findTraverse(Node* curNode, int data) {
+		bool found = false;
+
+		if (data > curNode->data) {
+			if (curNode->right) {
+				found = findTraverse(curNode->right, data);
+			} else {
+				return false;
+			}
+		} else if (data < curNode->data) {
+			if (curNode->left) {
+				found = findTraverse(curNode->left, data);
+			} else {
+				return false;
+			}
+		} else {
+			found = true;
+		}
+		return found;
 	}
 
 	void insert(int data) {
@@ -257,30 +343,37 @@ public:
 		if (not curNode) {
 			return;
 		}
+		
 		if (not curNode->left) {
 			if (curNode->leftEdges) {
-				cout << "Left edges should be zero at : " << curNode->data << ". leftEdges : " << curNode->leftEdges << endl;
+				cout << "ERROR : Left edges should be zero at : " << curNode->data << ". leftEdges : " << curNode->leftEdges << endl;
 			}
 		} else {
+			if (not curNode->left->data > curNode->data) {
+				cout << "ERROR : Node with value : " << curNode->data << " has left child with greater value than parent : " << curNode->left->data << endl;
+			}
 			traverseForBalance(curNode->left);
-			if (curNode->leftEdges != (max(curNode->left->leftEdges, curNode->left->rightEdges) + 1)) {
-				cout << "Left edges should be : " << (max(curNode->left->leftEdges, curNode->left->rightEdges) + 1) << " at : " << curNode->data << ". Actual leftEdges : " << curNode->leftEdges << endl;
+			if (curNode->leftEdges != (INTmax(curNode->left->leftEdges, curNode->left->rightEdges) + 1)) {
+				cout << "ERROR : Left edges should be : " << (INTmax(curNode->left->leftEdges, curNode->left->rightEdges) + 1) << " at : " << curNode->data << ". Actual leftEdges : " << curNode->leftEdges << endl;
 			}
 		}
 
 		if (not curNode->right) {
 			if (curNode->rightEdges) {
-				cout << "Right edges should be zero at : " << curNode->data << ". rightEdges : " << curNode->rightEdges << endl;
+				cout << "ERROR : Right edges should be zero at : " << curNode->data << ". rightEdges : " << curNode->rightEdges << endl;
 			}
 		} else {
+			if (not curNode->right->data > curNode->data) {
+				cout << "ERROR : Node with value : " << curNode->data << " has right child with greater value than parent : " << curNode->right->data << endl;
+			}
 			traverseForBalance(curNode->right);
-			if (curNode->rightEdges != (max(curNode->right->leftEdges, curNode->right->rightEdges) + 1)) {
-				cout << "Right edges should be : " << (max(curNode->right->leftEdges, curNode->right->rightEdges) + 1) << " at : " << curNode->data << ". Actual rightEdges : " << curNode->rightEdges << endl;
+			if (curNode->rightEdges != (INTmax(curNode->right->leftEdges, curNode->right->rightEdges) + 1)) {
+				cout << "ERROR : Right edges should be : " << (INTmax(curNode->right->leftEdges, curNode->right->rightEdges) + 1) << " at : " << curNode->data << ". Actual rightEdges : " << curNode->rightEdges << endl;
 			}
 		}
 
 		if (abs(curNode->leftEdges -  curNode->rightEdges) > 1) {
-			cout << "Node with value : " << curNode->data << " is not balanced. The left edges value is : " << curNode->leftEdges << " and right edges value is : " << curNode->rightEdges << endl;
+			cout << "ERROR : Node with value : " << curNode->data << " is not balanced. The left edges value is : " << curNode->leftEdges << " and right edges value is : " << curNode->rightEdges << endl;
 		}
 		return;
 	}
@@ -359,7 +452,7 @@ public:
 		if (not lRight) {
 			(*gP)->right->leftEdges = 0;
 		} else {
-			(*gP)->right->leftEdges = max(lRight->leftEdges, lRight->rightEdges) + 1;
+			(*gP)->right->leftEdges = INTmax(lRight->leftEdges, lRight->rightEdges) + 1;
 		}
 
 		setEdges(*gP, false, true);
@@ -392,7 +485,7 @@ public:
 		if (not rLeft) {
 			(*gP)->left->rightEdges = 0;
 		} else {
-			(*gP)->left->rightEdges = max(rLeft->leftEdges, rLeft->rightEdges) + 1;
+			(*gP)->left->rightEdges = INTmax(rLeft->leftEdges, rLeft->rightEdges) + 1;
 		}
 
 		setEdges(*gP, true, false);
@@ -434,13 +527,13 @@ public:
 		if (not lrr) {
 			newR->right->leftEdges = 0;
 		} else {
-			newR->right->leftEdges = max(lrr->leftEdges, lrr->rightEdges) + 1;
+			newR->right->leftEdges = INTmax(lrr->leftEdges, lrr->rightEdges) + 1;
 		}
 
 		if(not lrl) {
 			newR->left->rightEdges = 0;
 		} else {
-			newR->left->rightEdges = max(lrl->leftEdges, lrl->rightEdges) + 1;
+			newR->left->rightEdges = INTmax(lrl->leftEdges, lrl->rightEdges) + 1;
 		}
 
 		setEdges(newR, true, true);
@@ -484,13 +577,13 @@ public:
 		if (not rll) {
 			newR->left->rightEdges = 0;
 		} else {
-			newR->left->rightEdges = max(rll->leftEdges, rll->rightEdges) + 1;
+			newR->left->rightEdges = INTmax(rll->leftEdges, rll->rightEdges) + 1;
 		}
 
 		if (not rlr) {
 			newR->right->leftEdges = 0;
 		} else {
-			newR->right->leftEdges = max(rlr->leftEdges, rlr->rightEdges) + 1;
+			newR->right->leftEdges = INTmax(rlr->leftEdges, rlr->rightEdges) + 1;
 		}
 
 		setEdges(newR, true, true);

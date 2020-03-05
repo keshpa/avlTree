@@ -4,6 +4,8 @@
 #include "printTree.hpp"
 #include <stdlib.h>
 #include <time.h>
+#include <vector>
+#include <algorithm>
 
 using namespace std;
 
@@ -39,22 +41,61 @@ int main()
 	time_t curTime = time(nullptr);
 	srandom(curTime);
 
-	for (int i = 0; i < 50; ++i) {
-		auto data  = random() % 100;
+	printTree avlpt(avl.getRoot());
+
+	std::vector<int> myInts;
+	for (int i = 0; i < 10000; ++i) {
+		auto data  = random() % 1000;
 //		cout << "Now inserting : " << data << endl;
 		avl.insert(data);
+		auto it = lower_bound(myInts.begin(), myInts.end(), data);
+		if (it == myInts.end() || *it != data) {
+			myInts.insert(it, data);
+		}
+		for (int storedValue : myInts) {
+			auto found = avl.find(storedValue);
+			if (not found) {
+				cout << "Did not find value : " << storedValue << " in AVL Tree." << endl;
+				avlpt.print(avl.getRoot());
+				assert(0);
+			}
+		}
 		avl.traverseForBalance(avl.getRoot());
 	}
 
-	printTree avlpt(avl.getRoot());
 
 	avl.traverseForBalance(avl.getRoot());
 
-	for (int i = 0; i < 500; ++i) {
-		auto data  = random() % 100;
-//		cout << "Now deleting : " << data << endl;
+	for (int i = 0; i < 10000; ++i) {
+		auto data  = random() % 1000;
+		cout << "Now deleting : " << data << endl;
+		auto it = lower_bound(myInts.begin(), myInts.end(), data);
+		if (it != myInts.end() && *it == data) {
+			myInts.erase(it);
+		}
 		avl.remove(data);
+
+		int storedValue;
+		for (int storedValue : myInts) {
+			auto found = avl.find(storedValue);
+			if (not found) {
+				cout << "Did not find value : " << storedValue << " in AVL Tree." << endl;
+				avlpt.print(avl.getRoot());
+				assert(0);
+			}
+		}
+
+		avlpt.print(avl.getRoot());
 		avl.traverseForBalance(avl.getRoot());
+	}
+
+	for (int present : myInts) {
+		bool found = avl.find(present);
+		if (not found) {
+			cout << "Did not find value : " << present << " in AVL Tree." << endl;
+			avlpt.print(avl.getRoot());
+			assert(0);
+		}
 	}
 
 	avlpt.print(avl.getRoot());
