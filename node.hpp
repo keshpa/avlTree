@@ -174,6 +174,7 @@ public:
 			} else {
 //				cout << "Replacing old value : " << *replaceValue << " with new value : " << curNode->right->data << endl;
 				*replaceValue = curNode->right->data;
+//				cout << "Need replacement value for : " << curNode->right->data << endl;
 				imbalance = deleteNode(&curNode->right, &curNode->right->data);
 				if (imbalance != Imbalance::None) {
 					handleImbalance(&curNode->right, imbalance);
@@ -182,15 +183,28 @@ public:
 				imbalance = detectImbalance(curNode);
 			}
 		} else {
-//			cout << "Replacing original value : " << curNode->data << " with new value : " << curNode->left->data << endl;
-			curNode->data = curNode->left->data;
-//			cout << "Need replacement value for : " << curNode->left->data << endl;
-			imbalance = deleteNode(&curNode->left, &curNode->left->data);
-			if (imbalance != Imbalance::None) {
-				handleImbalance(&curNode->left, imbalance);
+			if (curNode->left->right) {
+				imbalance = pruneLargestRightNode(&curNode->left, replaceValue);
+				if (imbalance != Imbalance::None) {
+					handleImbalance(&curNode->left, imbalance);
+				}
+				if (curNode->left) {
+					setEdges(curNode->left, true, true);
+					imbalance = detectImbalance(curNode->left);
+				} else {
+					imbalance = Imbalance::None;
+				}
+			} else {
+//				cout << "Replacing old value : " << *replaceValue << " with new value : " << curNode->left->data << endl;
+				curNode->data = curNode->left->data;
+//				cout << "Need replacement value for : " << curNode->left->data << endl;
+				imbalance = deleteNode(&curNode->left, &curNode->left->data);
+				if (imbalance != Imbalance::None) {
+					handleImbalance(&curNode->left, imbalance);
+				}
+				setEdges(curNode, true, false);
+				imbalance = detectImbalance(curNode);
 			}
-			setEdges(curNode, true, false);
-			imbalance = detectImbalance(curNode);
 		}
 		return imbalance;
 	}
@@ -215,9 +229,41 @@ public:
 //				cout << "Need replacement value for : " << curNode->data << endl;
 				imbalance = deleteNode(&curNode, &curNode->data);
 				if (imbalance != Imbalance::None) {
-					handleImbalance(&curNode->right, imbalance);
+					handleImbalance(&curNode, imbalance);
 				}
 				setEdges(curNode, false, true);
+				imbalance = detectImbalance(curNode);
+			} else {
+				free(curNode);
+				*parent = nullptr;
+			}
+		}
+		return imbalance;
+	}
+
+	Imbalance pruneLargestRightNode(Node** parent, int* replacePayload) {
+		Imbalance imbalance = Imbalance::None;
+		assert(parent);
+		Node* curNode = *parent;
+		assert(curNode);
+
+		if (curNode->right) {
+			imbalance = pruneLargestRightNode(&curNode->right, replacePayload);
+			if (imbalance != Imbalance::None) {
+				handleImbalance(&curNode->right, imbalance);
+			}
+			setEdges(curNode, false, true);
+			imbalance = detectImbalance(curNode);
+		} else {
+//			cout << "Replacing old value : " << *replacePayload << " with new value : " << curNode->data << endl;
+			*replacePayload = curNode->data;
+			if (curNode->left) {
+//				cout << "Need replacement value for : " << curNode->data << endl;
+				imbalance = deleteNode(&curNode, &curNode->data);
+				if (imbalance != Imbalance::None) {
+					handleImbalance(&curNode, imbalance);
+				}
+				setEdges(curNode, true, true);
 				imbalance = detectImbalance(curNode);
 			} else {
 				free(curNode);
